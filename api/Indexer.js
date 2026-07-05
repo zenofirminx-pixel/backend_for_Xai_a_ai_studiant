@@ -1,10 +1,7 @@
 // /api/indexer.js
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import pdf from 'pdf-parse'; // npm i pdf-parse
 import { v4 as uuidv4 } from 'uuid';
-
-// IMPORTANT: on remonte de 1 dossier pour aller dans lib/school
 import { saveSchoolChunksBatch } from '../lib/school/storage'; 
 
 const URLS_ECOLE = [
@@ -12,20 +9,8 @@ const URLS_ECOLE = [
   "https://www.bosangani.org/",
   "https://www.tata-rafiki.org/",
   "https://fr.wikipedia.org/wiki/Intelligence_artificielle",
-  "https://fr.wikipedia.org/wiki/Python_(langage)",
-  "https://fr.wikipedia.org/wiki/Termux",
-  "https://fr.wikipedia.org/wiki/Firebase",
-  "https://fr.wikipedia.org/wiki/Robotique",
-  "https://fr.wikipedia.org/wiki/Algorithmie",
-  "https://fr.wikipedia.org/wiki/Base_de_donn%C3%A9es",
-  "https://fr.wikipedia.org/wiki/Internet",
-  "https://fr.wikipedia.org/wiki/Machine_learning",
-  "https://fr.wikipedia.org/wiki/R%C3%A9seau_informatique",
-  "https://fr.wikipedia.org/wiki/Syst%C3%A8me_d%27exploitation",
-  "https://fr.wikipedia.org/wiki/Programmation",
-  "https://fr.wikipedia.org/wiki/Data_science",
-  "https://fr.wikipedia.org/wiki/API",
-  "https://fr.wikipedia.org/wiki/Cloud_computing"
+  "https://fr.wikipedia.org/wiki/Python_(langage)"
+  // ... garde que 5 pour tester d'abord
 ];
 
 function decouperEnChunks(texte, taille = 700) {
@@ -39,7 +24,7 @@ function decouperEnChunks(texte, taille = 700) {
 async function crawlerSite(url) {
   try {
     console.log(`Crawling: ${url}`);
-    const { data: html } = await axios.get(url, { timeout: 15000 });
+    const { data: html } = await axios.get(url, { timeout: 15000, headers: {'User-Agent': 'Mozilla/5.0'} });
     const $ = cheerio.load(html);
     $('script, style, nav, footer, header').remove();
     const contenu = $('body').text().replace(/\s+/g, ' ').trim();
@@ -53,24 +38,30 @@ async function crawlerSite(url) {
 
 async function crawlerPDF(url) {
   try {
+    const pdf = (await import('pdf-parse')).default; // import dynamique pour éviter crash vercel
     console.log(`Crawling PDF: ${url}`);
     const { data } = await axios.get(url, { responseType: 'arraybuffer' });
     const pdfData = await pdf(data);
-    return {
-      url,
-      titre: "Emploi du temps PDF",
-      contenu: pdfData.text
-    };
+    return { url, titre: "Emploi du temps PDF", contenu: pdfData.text };
   } catch (e) {
     console.log(`Echec PDF: ${e.message}`);
     return null;
   }
 }
 
+// FONCTION POUR LES CORS
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 export default async function handler(req, res) {
-  // Sécurité optionnelle
-  if (req.headers['x-internal-key'] !== process.env.INTERNAL_API_KEY) {
-    return res.status(401).json({ error: "Non autorisé" });
+  setCors(res);
+
+  // Répond au preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
   console.log("Début indexation écoles Congo...\n");
@@ -101,8 +92,7 @@ export default async function handler(req, res) {
     await saveSchoolChunksBatch(chunksToSave);
     totalChunks += chunks.length;
     console.log(`${chunks.length} chunks sauvés pour: ${page.titre}`);
-
-    await new Promise(r => setTimeout(r, 2000)); // pause 2s entre les sites
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   console.log(`\nIndexation terminée! Total: ${totalChunks} chunks`);
