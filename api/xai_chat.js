@@ -1,6 +1,6 @@
 import { handleChat } from "../lib/ai/chat.js";
 import { setCors } from "../lib/cors/cors.js";
-import { db } from "../lib/firebase.js"; // <-- TA BONNE ROUTE
+import { db } from "../lib/firebase/firebase.js"; // <-- TA BONNE ROUTE
 import admin from "firebase-admin";
 
 async function searchSchoolIndex(query) {
