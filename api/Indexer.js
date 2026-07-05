@@ -6,9 +6,9 @@ import { db } from '../lib/firebase.js'; // <-- TON CHEMIN
 import { deleteOldSchoolData } from '../lib/delete/xai_delete.js'; // <-- on importe le delete
 
 const URLS_ECOLE = [
-  "https://www.layicongolesecole.org/",
-  "https://www.bosangani.org/",
-  "https://www.tata-rafiki.org/"
+  "https://www.harker.org/", // Lycée privé USA - très structuré
+  "https://www.phillipsacademy.edu/", // Phillips Academy - emploi du temps public
+  "https://www.stpaulsschool.org/" // St Paul's School - annonces + matières
 ];
 
 function decouperEnChunks(texte, taille = 700) {
