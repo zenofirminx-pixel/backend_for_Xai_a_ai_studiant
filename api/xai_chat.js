@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // 💬 CHAT MEMORY
+    // 💬 CHAT MEMORY (10 messages)
     // =========================
     const chatRef = db.collection("chats").doc(session);
 
@@ -35,47 +35,64 @@ export default async function handler(req, res) {
 
     const chatSnap = await chatRef
       .collection("messages")
-      .orderBy("timestamp", "asc")
-      .limit(20)
+      .orderBy("timestamp", "desc")
+      .limit(10)
       .get();
 
-    const history = chatSnap.docs.map(d => d.data());
+    const history = chatSnap.docs
+      .map(d => d.data())
+      .reverse(); // remettre dans l'ordre naturel
 
     // =========================
-    // 📚 SCHOOL INDEX (TOUTE LA COLLECTION)
+    // 📚 SCHOOL INDEX (simple + safe)
     // =========================
     const schoolSnap = await db.collection("school_index").get();
 
-    const schoolData = schoolSnap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const schoolData = schoolSnap.docs.map(doc => doc.data());
 
     // =========================
-    // 🧠 BUILD CONTEXT
+    // 🧠 BUILD CONTEXT (PROPRE)
     // =========================
+
+    const schoolContext = schoolData.map((item, i) => {
+      return `
+🏫 ÉCOLE ${i + 1}:
+${item.school_name || "École inconnue"}
+
+📚 CONTENU:
+${(item.documents || [])
+  .slice(0, 3)
+  .map(d => `- ${d.title}: ${d.content?.slice(0, 150) || ""}`)
+  .join("\n")}
+
+📅 EMPLOI DU TEMPS:
+${JSON.stringify(item.schedule || {}, null, 2)}
+
+📝 DEVOIRS:
+${JSON.stringify(item.homeworks || [], null, 2)}
+`;
+    }).join("\n-----------------\n");
+
     const memoryContext = `
-📚 CONTEXTE ÉCOLE (TOUTES LES DONNÉES DISPONIBLES):
-
-RÈGLE IMPORTANTE:
-- Ceci est une base de données scolaire
-- Chaque objet peut contenir : cours, emploi du temps, devoirs, annonces
-- Tu dois analyser et extraire seulement ce qui est utile à la question
-
-DONNÉES ÉCOLE:
-${JSON.stringify(schoolData, null, 2)}
+📚 CONTEXTE ÉCOLE:
+${schoolContext || "Aucune donnée école"}
 
 ---
 
-💬 MÉMOIRE CONVERSATION:
+💬 MÉMOIRE CONVERSATION (10 derniers messages):
 
 ${history
-  .map(m =>
+  .map((m, i) =>
     m.role === "user"
-      ? `👨‍🎓 ÉLÈVE: ${m.content}`
-      : `🤖 XAI: ${m.content}`
+      ? `${i + 1}. Élève: ${m.content}`
+      : `${i + 1}. Assistant: ${m.content}`
   )
   .join("\n")}
+
+⚠️ IMPORTANT:
+- Tu continues une conversation en cours
+- Tu ne dois jamais recommencer par "bonjour"
+- Tu utilises les données école si elles existent
 `;
 
     // =========================
