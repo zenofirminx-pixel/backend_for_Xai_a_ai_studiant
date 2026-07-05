@@ -2,15 +2,12 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
-import { saveSchoolChunksBatch } from '../lib/school/storage.js'; // <-- .js ajouté ici
+import { db } from '../lib/firebase/firebase.js'; // <-- VOILA LE BON CHEMIN
 
 const URLS_ECOLE = [
   "https://www.layicongolesecole.org/",
   "https://www.bosangani.org/",
-  "https://www.tata-rafiki.org/",
-  "https://fr.wikipedia.org/wiki/Intelligence_artificielle",
-  "https://fr.wikipedia.org/wiki/Python_(langage)"
-  // ... garde que 5 pour tester d'abord
+  "https://www.tata-rafiki.org/"
 ];
 
 function decouperEnChunks(texte, taille = 700) {
@@ -19,6 +16,15 @@ function decouperEnChunks(texte, taille = 700) {
     chunks.push(texte.substring(i, i + taille));
   }
   return chunks;
+}
+
+function detectCategorie(texte) {
+  texte = texte.toLowerCase();
+  if (texte.includes('horaire') || texte.includes('emploi du temps')) return 'horaire';
+  if (texte.includes('frais') || texte.includes('scolarité') || texte.includes('prix')) return 'frais';
+  if (texte.includes('contact') || texte.includes('adresse') || texte.includes('téléphone')) return 'contact';
+  if (texte.includes('admission') || texte.includes('inscription')) return 'admission';
+  return 'general';
 }
 
 async function crawlerSite(url) {
@@ -36,20 +42,13 @@ async function crawlerSite(url) {
   }
 }
 
-async function crawlerPDF(url) {
-  try {
-    const pdf = (await import('pdf-parse')).default; // import dynamique pour éviter crash vercel
-    console.log(`Crawling PDF: ${url}`);
-    const { data } = await axios.get(url, { responseType: 'arraybuffer' });
-    const pdfData = await pdf(data);
-    return { url, titre: "Emploi du temps PDF", contenu: pdfData.text };
-  } catch (e) {
-    console.log(`Echec PDF: ${e.message}`);
-    return null;
-  }
+async function saveSchoolChunksBatch(chunks) {
+  const batch = db.batch();
+  const colRef = db.collection('pages_ecole');
+  chunks.forEach(c => batch.set(colRef.doc(c.id), c));
+  await batch.commit();
 }
 
-// FONCTION POUR LES CORS
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -58,35 +57,33 @@ function setCors(res) {
 
 export default async function handler(req, res) {
   setCors(res);
-
-  // Répond au preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   console.log("Début indexation écoles Congo...\n");
   let totalChunks = 0;
 
   for (const url of URLS_ECOLE) {
-    let page = null;
-    if (url.includes(".pdf") || url.includes("drive.google.com")) {
-      page = await crawlerPDF(url);
-    } else {
-      page = await crawlerSite(url);
-    }
-
+    const page = await crawlerSite(url);
     if (!page || !page.contenu) continue;
 
     const chunks = decouperEnChunks(page.contenu);
-    const chunksToSave = chunks.map(chunk => ({
+    const chunksToSave = chunks.map((chunk, i) => ({
       id: uuidv4(),
       url: page.url,
+      domaine: new URL(page.url).hostname,
       titre: page.titre,
       chunk: chunk,
+      chunk_index: i,
+      total_chunks: chunks.length,
+      resume_auto: chunk.substring(0, 200) + "...",
       mots_cles: [...new Set(chunk.toLowerCase().match(/\w{4,}/g) || [])].slice(0, 20),
       source: "CSC_Ngaba",
-      type: "emploi_du_temps",
-      date_indexation: new Date()
+      type: "ecole",
+      categorie: detectCategorie(chunk),
+      pays: "CD",
+      ville: "Kinshasa",
+      date_indexation: new Date(),
+      statut: "actif"
     }));
 
     await saveSchoolChunksBatch(chunksToSave);
@@ -95,6 +92,5 @@ export default async function handler(req, res) {
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  console.log(`\nIndexation terminée! Total: ${totalChunks} chunks`);
   return res.status(200).json({ success: true, total: totalChunks });
 }
