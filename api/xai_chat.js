@@ -1,8 +1,6 @@
 import { handleChat } from "../lib/ai/chat.js";
 import { loadSchoolData } from "../lib/school/storage.js";
 import { setCors } from "../lib/cors/cors.js";
-import { db } from "../lib/firebase/admin.js";
-import { doc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default async function handler(req, res) {
   setCors(res);
@@ -16,53 +14,30 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, session = "default" } = req.body || {};
+    const { message } = req.body || {};
 
     if (!message) {
       return res.status(400).json({ error: "Message manquant" });
     }
 
-    // =========================
-    // 📚 LOAD FIREBASE MEMORY
-    // =========================
+    // 📚 lecture Firebase (ou storage local)
     const schoolData = await loadSchoolData();
 
-    const schoolContext = schoolData
+    // 🧠 CONVERSION EN MÉMOIRE IA (IMPORTANT)
+    const memoryContext = schoolData
       ? `
-📚 MÉMOIRE ÉCOLE:
+📚 DONNÉES ÉCOLE:
 ${JSON.stringify(schoolData, null, 2)}
 `
       : `
-📚 MÉMOIRE ÉCOLE:
-Aucune donnée scolaire enregistrée.
+📚 DONNÉES ÉCOLE:
+Aucune donnée enregistrée.
 `;
 
-    // =========================
-    // 🧠 SAVE USER MESSAGE
-    // =========================
-    await addDoc(collection(db, "chats", session, "messages"), {
-      role: "user",
-      content: message,
-      createdAt: serverTimestamp()
-    });
+    // 🤖 envoi au modèle avec contexte
+    const response = await handleChat(message, memoryContext);
 
-    // =========================
-    // 🤖 AI RESPONSE
-    // =========================
-    const response = await handleChat(message, schoolContext);
-
-    // =========================
-    // 💾 SAVE AI RESPONSE
-    // =========================
-    await addDoc(collection(db, "chats", session, "messages"), {
-      role: "assistant",
-      content: response,
-      createdAt: serverTimestamp()
-    });
-
-    return res.status(200).json({
-      response
-    });
+    return res.status(200).json({ response });
 
   } catch (err) {
     console.error("XAI ERROR:", err);
