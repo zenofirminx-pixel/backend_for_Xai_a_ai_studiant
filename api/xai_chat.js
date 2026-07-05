@@ -22,42 +22,62 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // 💾 SAVE USER MESSAGE
+    // 💾 1. SAVE USER MESSAGE
     // =========================
     const chatRef = db.collection("chats").doc(session);
 
     await chatRef.collection("messages").add({
       role: "user",
+      type: "chat_message",
       content: message,
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
 
     // =========================
-    // 📚 LOAD CONTEXT (MEMOIRE)
+    // 📚 2. LOAD MEMORY (LAST MESSAGES)
     // =========================
-    const snap = await chatRef.collection("messages")
+    const snap = await chatRef
+      .collection("messages")
       .orderBy("timestamp", "asc")
       .limit(20)
       .get();
 
     const history = snap.docs.map(d => d.data());
 
+    // =========================
+    // 🧠 3. BUILD SAFE MEMORY CONTEXT
+    // =========================
     const memoryContext = `
-📚 HISTORIQUE CONVERSATION:
+📚 MÉMOIRE CONVERSATION (NE PAS CONFONDRE AVEC DES COURS):
 
-${history.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n")}
+RÈGLE IMPORTANTE:
+- USER = message élève
+- ASSISTANT = réponse IA
+- CE NE SONT PAS DES LEÇONS
+
+HISTORIQUE:
+
+${history
+  .map(m => {
+    if (m.role === "user") {
+      return `👨‍🎓 ÉLÈVE: ${m.content}`;
+    }
+    return `🤖 XAI: ${m.content}`;
+  })
+  .join("\n")}
 `;
 
     // =========================
-    // 🤖 AI RESPONSE
+    // 🤖 4. AI RESPONSE
     // =========================
     const response = await handleChat(message, memoryContext);
 
     // =========================
-    // 💾 SAVE AI RESPONSE
+    // 💾 5. SAVE AI RESPONSE
     // =========================
     await chatRef.collection("messages").add({
       role: "assistant",
+      type: "chat_response",
       content: response,
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
