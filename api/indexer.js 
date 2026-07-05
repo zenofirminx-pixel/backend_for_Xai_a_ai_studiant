@@ -1,0 +1,110 @@
+// /api/indexer.js
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import pdf from 'pdf-parse'; // npm i pdf-parse
+import { v4 as uuidv4 } from 'uuid';
+
+// IMPORTANT: on remonte de 1 dossier pour aller dans lib/school
+import { saveSchoolChunksBatch } from '../lib/school/storage'; 
+
+const URLS_ECOLE = [
+  "https://www.layicongolesecole.org/",
+  "https://www.bosangani.org/",
+  "https://www.tata-rafiki.org/",
+  "https://fr.wikipedia.org/wiki/Intelligence_artificielle",
+  "https://fr.wikipedia.org/wiki/Python_(langage)",
+  "https://fr.wikipedia.org/wiki/Termux",
+  "https://fr.wikipedia.org/wiki/Firebase",
+  "https://fr.wikipedia.org/wiki/Robotique",
+  "https://fr.wikipedia.org/wiki/Algorithmie",
+  "https://fr.wikipedia.org/wiki/Base_de_donn%C3%A9es",
+  "https://fr.wikipedia.org/wiki/Internet",
+  "https://fr.wikipedia.org/wiki/Machine_learning",
+  "https://fr.wikipedia.org/wiki/R%C3%A9seau_informatique",
+  "https://fr.wikipedia.org/wiki/Syst%C3%A8me_d%27exploitation",
+  "https://fr.wikipedia.org/wiki/Programmation",
+  "https://fr.wikipedia.org/wiki/Data_science",
+  "https://fr.wikipedia.org/wiki/API",
+  "https://fr.wikipedia.org/wiki/Cloud_computing"
+];
+
+function decouperEnChunks(texte, taille = 700) {
+  const chunks = [];
+  for (let i = 0; i < texte.length; i += taille) {
+    chunks.push(texte.substring(i, i + taille));
+  }
+  return chunks;
+}
+
+async function crawlerSite(url) {
+  try {
+    console.log(`Crawling: ${url}`);
+    const { data: html } = await axios.get(url, { timeout: 15000 });
+    const $ = cheerio.load(html);
+    $('script, style, nav, footer, header').remove();
+    const contenu = $('body').text().replace(/\s+/g, ' ').trim();
+    const titre = $('title').text() || url;
+    return { url, titre, contenu };
+  } catch (e) {
+    console.error(`Echec Site: ${url}`, e.message);
+    return null;
+  }
+}
+
+async function crawlerPDF(url) {
+  try {
+    console.log(`Crawling PDF: ${url}`);
+    const { data } = await axios.get(url, { responseType: 'arraybuffer' });
+    const pdfData = await pdf(data);
+    return {
+      url,
+      titre: "Emploi du temps PDF",
+      contenu: pdfData.text
+    };
+  } catch (e) {
+    console.log(`Echec PDF: ${e.message}`);
+    return null;
+  }
+}
+
+export default async function handler(req, res) {
+  // Sécurité optionnelle
+  if (req.headers['x-internal-key'] !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ error: "Non autorisé" });
+  }
+
+  console.log("Début indexation écoles Congo...\n");
+  let totalChunks = 0;
+
+  for (const url of URLS_ECOLE) {
+    let page = null;
+    if (url.includes(".pdf") || url.includes("drive.google.com")) {
+      page = await crawlerPDF(url);
+    } else {
+      page = await crawlerSite(url);
+    }
+
+    if (!page || !page.contenu) continue;
+
+    const chunks = decouperEnChunks(page.contenu);
+    const chunksToSave = chunks.map(chunk => ({
+      id: uuidv4(),
+      url: page.url,
+      titre: page.titre,
+      chunk: chunk,
+      mots_cles: [...new Set(chunk.toLowerCase().match(/\w{4,}/g) || [])].slice(0, 20),
+      source: "CSC_Ngaba",
+      type: "emploi_du_temps",
+      date_indexation: new Date()
+    }));
+
+    await saveSchoolChunksBatch(chunksToSave);
+    totalChunks += chunks.length;
+    console.log(`${chunks.length} chunks sauvés pour: ${page.titre}`);
+    
+    await new Promise(r => setTimeout(r, 2000)); // pause 2s entre les sites
+  }
+
+  console.log(`\nIndexation terminée! Total: ${totalChunks} chunks`);
+  return res.status(200).json({ success: true, total: totalChunks });
+}
