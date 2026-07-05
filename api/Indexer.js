@@ -2,7 +2,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
-import { saveSchoolChunksBatch } from '../lib/school/storage'; 
+import { saveSchoolChunksBatch } from '../lib/school/storage.js'; // <-- .js ajouté ici
 
 const URLS_ECOLE = [
   "https://www.layicongolesecole.org/",
@@ -24,7 +24,7 @@ function decouperEnChunks(texte, taille = 700) {
 async function crawlerSite(url) {
   try {
     console.log(`Crawling: ${url}`);
-    const { data: html } = await axios.get(url, { timeout: 15000, headers: {'User-Agent': 'Mozilla/5.0'} });
+    const { data: html } = await axios.get(url, { timeout: 15000, headers: {'User-Agent': 'Mozilla/5.0 XAI-Bot'} });
     const $ = cheerio.load(html);
     $('script, style, nav, footer, header').remove();
     const contenu = $('body').text().replace(/\s+/g, ' ').trim();
