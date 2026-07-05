@@ -2,7 +2,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../lib/firebase.js'; // <-- TON CHEMIN
+import { db } from '../lib/firebase/firebase.js'; // <-- TON CHEMIN
 import { deleteOldSchoolData } from '../lib/delete/xai_delete.js'; // <-- on importe le delete
 
 const URLS_ECOLE = [
