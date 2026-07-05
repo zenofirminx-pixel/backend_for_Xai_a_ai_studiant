@@ -1,0 +1,83 @@
+// /lib/school/storage.js
+const { db } = require('../firebase/firebase'); // <-- BON CHEMIN
+
+/**
+ * Sauvegarde 1 chunk de page de l'école
+ * Utilisé par indexer.js
+ */
+async function saveSchoolChunk(chunkData) {
+  try {
+    const docRef = db.collection('pages_ecole').doc();
+    await docRef.set({
+      ...chunkData,
+      date_indexation: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Erreur saveSchoolChunk:", e);
+    throw e;
+  }
+}
+
+/**
+ * Sauvegarde un batch de chunks - plus rapide pour indexer.js
+ */
+async function saveSchoolChunksBatch(chunksArray) {
+  if (chunksArray.length === 0) return;
+  
+  const batch = db.batch();
+  chunksArray.forEach(chunkData => {
+    const docRef = db.collection('pages_ecole').doc();
+    batch.set(docRef, {
+      ...chunkData,
+      date_indexation: new Date().toISOString()
+    });
+  });
+  await batch.commit();
+}
+
+/**
+ * Cherche dans les docs de l'école pour donner le contexte à cores.js / chat.js
+ */
+async function searchSchoolDocs(question) {
+  try {
+    const mots = question.toLowerCase().match(/\w{4,}/g) || [];
+    const motsRecherche = [...new Set(mots)].slice(0, 5);
+
+    if (motsRecherche.length === 0) return "";
+
+    const snap = await db.collection('pages_ecole')
+      .where('mots_cles', 'array-contains-any', motsRecherche)
+      .orderBy('date_indexation', 'desc')
+      .limit(5)
+      .get();
+
+    if (snap.empty) return "";
+
+    return snap.docs.map(d => {
+      const data = d.data();
+      return `[Source: ${data.titre}]\n${data.chunk}`;
+    }).join('\n---\n');
+
+  } catch (e) {
+    console.error("Erreur searchSchoolDocs:", e);
+    return "";
+  }
+}
+
+/**
+ * Vide toute la collection pages_ecole pour re-indexer
+ */
+async function clearSchoolData() {
+  const snap = await db.collection('pages_ecole').get();
+  const batch = db.batch();
+  snap.docs.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+module.exports = { 
+  saveSchoolChunk,
+  saveSchoolChunksBatch,
+  searchSchoolDocs,
+  clearSchoolData
+};
