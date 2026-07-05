@@ -2,7 +2,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../lib/firebase.js'; // <-- TON BON CHEMIN
+import { db } from '../lib/firebase/firebase.js'; // <-- TON BON CHEMIN
 
 const URLS_ECOLE = [
   "https://www.harker.org/",
