@@ -12,7 +12,7 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_TOKEN;
 
 // 👉 TON BACKEND XAI (prioritaire)
-const XAI_URL = "https://xai-fawn-delta.vercel.app/";
+const XAI_URL = "https://xai-fawn-delta.vercel.app/api/xai_chat/";
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
