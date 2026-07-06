@@ -1,57 +1,49 @@
+import { Client, GatewayIntentBits } from "discord.js";
 import axios from "axios";
-import xaiHandler from "./xai_chat.js"; // IMPORT DIRECT
 
-export default async function handler(req, res) {
-  // 1. CORS pour ton UI
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+client.once("ready", () => {
+  console.log(`Bot connecté: ${client.user.tag}`);
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
 
   try {
-    const { message, channel_id } = req.body;
+    await message.channel.sendTyping();
 
-    if (!process.env.DISCORD_TOKEN) {
-      return res.status(500).json({ error: "DISCORD_TOKEN manquant dans Vercel" });
-    }
-    if (!channel_id) {
-      return res.status(400).json({ error: "channel_id manquant" });
-    }
-    if (!message) {
-      return res.status(400).json({ error: "message manquant" });
-    }
-
-    // 2. APPELER xai_chat.js DIRECTEMENT AU LIEU DE AXIOS
-    // On simule un req/res pour xai_chat
-    let xaiReply = "";
-    const fakeReq = { body: { message, user: "discord" } };
-    const fakeRes = {
-      status: (code) => ({ json: (data) => { xaiReply = data.reply } }),
-      json: (data) => { xaiReply = data.reply }
-    };
-    
-    await xaiHandler(fakeReq, fakeRes);
-
-    if (!xaiReply) {
-      return res.status(500).json({ error: "xai_chat n'a rien renvoyé" });
-    }
-
-    // 3. ENVOYER LA REPONSE DANS DISCORD AVEC LE TOKEN
-    await axios.post(
-      `https://discord.com/api/v10/channels/${channel_id}/messages`,
-      { content: xaiReply },
+    // Appel OpenRouter direct
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "x-ai/grok-4-fast",
+        messages: [{ role: "user", content: message.content }]
+      },
       {
         headers: {
-          'Authorization': `Bot ${process.env.DISCORD_TOKEN}`,
-          'Content-Type': 'application/json'
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
         }
       }
     );
 
-    return res.status(200).json({ success: true, reply: xaiReply });
+    const reply = response.data.choices[0].message.content;
+    await message.reply(reply);
 
   } catch (error) {
-    console.error("CRASH:", error.response?.data || error.message);
-    return res.status(500).json({ error: error.response?.data || error.message });
+    console.error(error.response?.data || error.message);
+    await message.reply("Erreur OpenRouter");
   }
-}
+});
+
+client.login(DISCORD_TOKEN);
