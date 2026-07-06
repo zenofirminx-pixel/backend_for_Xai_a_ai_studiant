@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // 💬 CHAT MEMORY (10 messages)
+    // 💬 CHAT MEMORY
     // =========================
     const chatRef = db.collection("chats").doc(session);
 
@@ -35,64 +35,47 @@ export default async function handler(req, res) {
 
     const chatSnap = await chatRef
       .collection("messages")
-      .orderBy("timestamp", "desc")
-      .limit(10)
+      .orderBy("timestamp", "asc")
+      .limit(20)
       .get();
 
-    const history = chatSnap.docs
-      .map(d => d.data())
-      .reverse(); // remettre dans l'ordre naturel
+    const history = chatSnap.docs.map(d => d.data());
 
     // =========================
-    // 📚 SCHOOL INDEX (simple + safe)
+    // 📚 SCHOOL INDEX (TOUTE LA COLLECTION)
     // =========================
     const schoolSnap = await db.collection("school_index").get();
 
-    const schoolData = schoolSnap.docs.map(doc => doc.data());
+    const schoolData = schoolSnap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
 
     // =========================
-    // 🧠 BUILD CONTEXT (PROPRE)
+    // 🧠 BUILD CONTEXT
     // =========================
-
-    const schoolContext = schoolData.map((item, i) => {
-      return `
-🏫 ÉCOLE ${i + 1}:
-${item.school_name || "École inconnue"}
-
-📚 CONTENU:
-${(item.documents || [])
-  .slice(0, 3)
-  .map(d => `- ${d.title}: ${d.content?.slice(0, 150) || ""}`)
-  .join("\n")}
-
-📅 EMPLOI DU TEMPS:
-${JSON.stringify(item.schedule || {}, null, 2)}
-
-📝 DEVOIRS:
-${JSON.stringify(item.homeworks || [], null, 2)}
-`;
-    }).join("\n-----------------\n");
-
     const memoryContext = `
-📚 CONTEXTE ÉCOLE:
-${schoolContext || "Aucune donnée école"}
+📚 CONTEXTE ÉCOLE (TOUTES LES DONNÉES DISPONIBLES):
+
+RÈGLE IMPORTANTE:
+- Ceci est une base de données scolaire
+- Chaque objet peut contenir : cours, emploi du temps, devoirs, annonces
+- Tu dois analyser et extraire seulement ce qui est utile à la question
+
+DONNÉES ÉCOLE:
+${JSON.stringify(schoolData, null, 2)}
 
 ---
 
-💬 MÉMOIRE CONVERSATION (10 derniers messages):
+💬 MÉMOIRE CONVERSATION:
 
 ${history
-  .map((m, i) =>
+  .map(m =>
     m.role === "user"
-      ? `${i + 1}. Élève: ${m.content}`
-      : `${i + 1}. Assistant: ${m.content}`
+      ? `👨‍🎓 ÉLÈVE: ${m.content}`
+      : `🤖 XAI: ${m.content}`
   )
   .join("\n")}
-
-⚠️ IMPORTANT:
-- Tu continues une conversation en cours
-- Tu ne dois jamais recommencer par "bonjour"
-- Tu utilises les données école si elles existent
 `;
 
     // =========================
