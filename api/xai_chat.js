@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
     const chatRef = db.collection("chats").doc(session); 
 
-    // 1. Récupérer d'abord les 9 anciens messages pour éviter le bug du serverTimestamp
+    // 1. Récupérer l'historique récent (9 messages max)
     const chatSnap = await chatRef
       .collection("messages")
       .orderBy("timestamp", "desc")
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
 
     const history = chatSnap.docs.map(d => d.data()).reverse();
 
-    // 2. Ajouter le message actuel localement à l'historique pour l'IA
+    // 2. Ajouter le message actuel localement pour l'IA
     history.push({ role: "user", content: message });
 
     // 3. Sauvegarder le message de l'élève dans Firestore
@@ -43,11 +43,18 @@ export default async function handler(req, res) {
       timestamp: admin.firestore.FieldValue.serverTimestamp() 
     }); 
 
-    // 4. Récupérer toute la collection school_index
+    // 4. LECTURE TOTALE ET BRUTE DE LA COLLECTION SCHOOL_INDEX
     const schoolSnap = await db.collection("school_index").get(); 
-    const schoolData = schoolSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })); 
+    
+    // On extrait chaque document sous forme d'objet JSON complet et sans perte
+    const schoolData = schoolSnap.docs.map(doc => {
+      return {
+        id_document: doc.id,
+        ...doc.data()
+      };
+    }); 
 
-    // 5. Build du contexte (Ta structure exacte d'origine, nettoyée des bugs de syntaxe)
+    // 5. Build du contexte (Ta structure exacte d'origine)
     const memoryContext = ` 
 📚 CONTEXTE ÉCOLE (TOUTES LES DONNÉES DISPONIBLES):
 
