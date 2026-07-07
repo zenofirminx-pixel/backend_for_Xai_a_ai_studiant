@@ -1,5 +1,9 @@
-const { Client, GatewayIntentBits } = require("discord.js");
-const axios = require("axios");
+import { Client, GatewayIntentBits } from "discord.js";
+import axios from "axios";
+import "dotenv/config"; // pour tester en local
+
+console.log("TOKEN existe?",!!process.env.DISCORD_TOKEN);
+console.log("OPENROUTER existe?",!!process.env.OPENROUTER_API_KEY);
 
 const client = new Client({
   intents: [
@@ -9,25 +13,43 @@ const client = new Client({
   ]
 });
 
-const TOKEN = process.env.DISCORD_TOKEN;
-
-const XAI_URL = "https://xai-fawn-delta.vercel.app/api/xai_chat/";
+client.once("ready", () => {
+  console.log(`✅ Bot connecté: ${client.user.tag}`);
+});
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
+  console.log(`📩 Message reçu de ${message.author.username}: ${message.content}`);
 
   try {
-    const response = await axios.post(XAI_URL, {
-      message: message.content,
-      user: message.author.id
-    });
+    await message.channel.sendTyping();
 
-    await message.reply(response.data.reply);
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "x-ai/grok-4-fast",
+        messages: [{ role: "user", content: message.content }]
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://discord.com", // obligatoire OpenRouter
+          "X-Title": "DiscordBot"
+        }
+      }
+    );
+
+    const reply = response.data.choices[0].message.content;
+    console.log("🤖 Réponse IA:", reply);
+    await message.reply(reply);
 
   } catch (error) {
-    console.error(error.response?.data || error.message);
-    await message.reply("Erreur de connexion à Xai.");
+    console.error("❌ ERREUR COMPLETE:", error.response?.data || error.message);
+    await message.reply(`Erreur: ${error.response?.data?.error?.message || error.message}`);
   }
 });
 
-client.login(TOKEN);
+client.login(process.env.DISCORD_TOKEN).catch(err => {
+  console.error("❌ ERREUR LOGIN DISCORD:", err);
+});
